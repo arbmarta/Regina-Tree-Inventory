@@ -2,12 +2,15 @@ import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from shapely.ops import unary_union
+from shapely.geometry import Point
+import numpy as np
 
 ## -------------------------------------------------- IMPORT DATASETS --------------------------------------------------
 #region
 
 # Import datasets
 df_u = pd.read_excel("Datasets/Uhrich Avenue - Usher Street.xlsx")
+df_v = pd.read_excel("Datasets/Van Horne - Victory Crescent.xlsx")
 df_y = pd.read_excel("Datasets/Yarnton-Young Crescent.xlsx")
 df_z = pd.read_excel("Datasets/Zaran-Zech Place.xlsx")
 
@@ -17,7 +20,10 @@ df_z = pd.read_excel("Datasets/Zaran-Zech Place.xlsx")
 #region
 
 # Dataset list
-inventories = [df_u, df_y, df_z]
+inventories = [df_u, df_v, df_y, df_z]
+
+# Correct known errors between inventories and address point dataset
+df_v.loc[df_v['Street'] == 'Victoria Avenue East', 'Street'] = 'Victoria Avenue'
 
 # Forward fill Street, Block Start, Block End, Sector, Street Number
 columns_to_fill = ['Street', 'Block Start', 'Block End', 'Sector', 'Street Number']
@@ -46,6 +52,7 @@ for inventory in inventories:
 
 # Assign Document column based on file name
 df_u["Document"] = "Uhrich Avenue - Usher Street"
+df_v["Document"] = "Van Horne - Victory Crescent"
 df_y["Document"] = "Yarnton-Young Crescent"
 df_z["Document"] = "Zaran-Zech Place"
 
@@ -57,6 +64,7 @@ df_z["Document"] = "Zaran-Zech Place"
 # Inventory names dictionary
 inventories_dictionary = {
     "df_u": df_u,
+    "df_v": df_v,
     "df_y": df_y,
     "df_z": df_z
 }
@@ -111,6 +119,7 @@ df['Species'] = df['Species'].fillna("Blank")
 # Species dictionary
 species_dict = {
     "Amur cherry": "Prunus maackii",
+    "Amur maple": "Acer tataricum subsp. ginnala",
     "Apple": "Malus spp.",
     "American basswood": "Tilia americana",
     "American elm": "Ulmus americana",
@@ -128,6 +137,7 @@ species_dict = {
     "Cotoneaster": "Cotoneaster lucidus",
     "Cottonwood": "Populus deltoides ssp. monilifera",
     "Crabapple": "Malus spp.",
+    "Cutleaf weeping birch": "Betula pendula 'Laciniata'",
     "Green ash": "Fraxinus pennsylvanica",
     "Juniper": "Juniperus scopulorum",
     "Lilac": "Syringa",
@@ -141,23 +151,40 @@ species_dict = {
     "Patmore ash": "Fraxinus pennsylvanica 'Patmore'",
     "Pine": "Pinus spp.",
     "Poplar": "Populus spp.",
+    "Poplar - multistem": "Populus spp.",
     "Redosier Dogwood": "Cornus sericea",
+    "Red osier dogwood": "Cornus sericea",
     "Rose bush": "Rosa spp.",
     "Russian almond": "Prunus tenella",
     "Russian olive": "Elaeagnus angustifolia",
     "Scotch pine": "Pinus sylvestris",
     "Shining willow": "Salix lucida",
+    "Shubert chokecherry": "Prunus virginiana 'Schubert'",
     "Silver maple": "Acer saccharinum",
     "Trembling aspen": "Populus tremuloides",
     "Weeping birch": "Betula pendula",
     "White birch": "Betula papyrifera",
     "White spruce": "Picea glauca",
     "Willow": "Salix spp.",
+    "Laurel willow": "Salix pentandra",
+    "Pyramidal cedar": "Thuja occidentalis",
+    "Fraxinus nigra": "Fraxinus nigra",
+    "Pin cherry": "Prunus pensylvanica",
+    "Honey suckle": "Lonicera spp.",
+    "Aster": "Aster spp.",
+    "Currant": "Ribes spp.",
+    "Plum": "Prunus spp.",
+    "Balsam poplar": "Populus balsamifera",
+    "Largetooth aspen": "Populus grandidentata",
+    "Royalty flowering crap": "Malus 'Royalty'",
+    "European white birch": "Betula pendula",
 
     "Unclear": "Unclear",
+    "Unknown": "Unclear",
     "Amier": "Unclear",
 
-    "Blank": "Missing",
+    "Blank": "No tree",
+    "Vacant": "No tree",
 
     "Fence": "No space",
     "Fire hydrant": "No space",
@@ -165,9 +192,17 @@ species_dict = {
     "Water line": "No space",
     "Light": "No space",
     "Lamp post": "No space",
+    "Telephone pole": "No space",
+    "Sidewalk": "No space",
+    "Parking": "No space",
+    "Signpost": "No space",
+    "Pole": "No space",
     "Street light": "No space",
     "Driveway": "No space",
     "No room": "No space"}
+
+
+
 
 # Create a botanical name column
 df['Botanical Name'] = df['Species'].map(species_dict)
@@ -282,6 +317,137 @@ recent_divisions.plot(ax=ax, linewidth=1, facecolor='grey', alpha=0.075)
 
 # Plot matched address points
 matched_address_gdf.plot(ax=ax, markersize=3, color='green', alpha=0.7)
+
+# Clean up plot
+ax.set_axis_off()
+plt.tight_layout()
+plt.show()
+
+#endregion
+
+## ---------------------------------------- INTERPOLATE BETWEEN ADDRESS POINTS -----------------------------------------
+#region
+
+# Extract address number from full address
+def extract_address_number(addr):
+    try:
+        return int(addr.split()[0])
+    except:
+        return np.nan
+
+
+# Add numeric address number column
+df['Address Number'] = df['Full Address'].apply(extract_address_number)
+address_points['Address Number'] = address_points['FULLADDRSS'].apply(extract_address_number)
+
+# Merge address_points with coordinates
+address_points = address_points.dropna(subset=['Address Number', 'geometry'])
+
+# Create a GeoDataFrame to hold interpolated results
+interpolated_points = []
+
+# Loop through unmatched addresses
+for unmatched in unmatched_addresses:
+    addr_num = extract_address_number(unmatched)
+    if np.isnan(addr_num):
+        continue  # skip if number is missing
+
+    # Get street name
+    street = unmatched.replace(str(addr_num), '').strip()
+
+    # Get known points on the same street
+    candidates = address_points[address_points['STREET'] == street]
+    if len(candidates) < 2:
+        continue  # not enough points to interpolate
+
+    # Find lower and upper bounding addresses
+    lower = candidates[candidates['Address Number'] < addr_num].sort_values('Address Number').tail(1)
+    upper = candidates[candidates['Address Number'] > addr_num].sort_values('Address Number').head(1)
+
+    if not lower.empty and not upper.empty:
+        # Interpolate x and y
+        lower_num = lower['Address Number'].values[0]
+        upper_num = upper['Address Number'].values[0]
+        lower_geom = lower.geometry.values[0]
+        upper_geom = upper.geometry.values[0]
+
+        ratio = (addr_num - lower_num) / (upper_num - lower_num)
+
+        interpolated_x = lower_geom.x + (upper_geom.x - lower_geom.x) * ratio
+        interpolated_y = lower_geom.y + (upper_geom.y - lower_geom.y) * ratio
+
+        interpolated_points.append({
+            'Full Address': unmatched,
+            'Street': street,
+            'Address Number': addr_num,
+            'geometry': Point(interpolated_x, interpolated_y)
+        })
+
+# Create GeoDataFrame from interpolated points
+interpolated_gdf = gpd.GeoDataFrame(interpolated_points, crs=address_points.crs)
+
+print(f"\n✅ Interpolated {len(interpolated_gdf)} unmatched addresses.")
+
+#endregion
+
+## -------------------------------------------------- PLOT LOCATIONS WITH INTERPOLATED POINTS ---------------------------------------------------
+#region
+
+# Filter address_points to matched addresses
+matched_address_gdf = address_points[address_points['FULLADDRSS'].isin(df['Full Address'])]
+
+# Import road centerlines, current city boundary, and subdivision shapefiles
+roads = gpd.read_file("Roads/RoadCenterline.shp")
+boundary = gpd.read_file("City Limits/CityLimits.shp")
+divisions = gpd.read_file("Subdivisions/YearofDevelopment.shp")
+
+# Ensure CRS matches
+target_crs = roads.crs
+if boundary.crs != target_crs:
+    boundary = boundary.to_crs(target_crs)
+if divisions.crs != target_crs:
+    divisions = divisions.to_crs(target_crs)
+
+# Clip divisions to new city boundary
+divisions_clipped = gpd.clip(divisions, boundary)
+
+# Filter subdivisions where Year > 1990
+recent_divisions = divisions_clipped[divisions_clipped['Year'] > 1985]
+old_divisions = divisions_clipped[divisions_clipped['Year'] < 1985]
+
+# Create a mask from year for divisions
+merged_old = unary_union(old_divisions.geometry)
+enclosed_old = merged_old.buffer(1).buffer(-1)  # adjust value based on units
+old_divisions = gpd.GeoDataFrame(geometry=[enclosed_old], crs=old_divisions.crs)
+
+# Clip city boundary by divisions
+old_boundary = gpd.clip(boundary, old_divisions)
+
+# Clip roads to city boundary
+roads_clipped_new = gpd.clip(roads, recent_divisions)
+roads_clipped_old = gpd.clip(roads, old_boundary)
+
+# Plot
+fig, ax = plt.subplots(figsize=(10, 10))
+
+# Plot clipped roads
+roads_clipped_old.plot(ax=ax, linewidth=0.5, edgecolor='gray')
+roads_clipped_new.plot(ax=ax, linewidth=0.5, edgecolor='gray', alpha=0.6)
+
+# Plot city boundary (transparent fill, black edge)
+boundary.plot(ax=ax, linewidth=1, edgecolor='black', facecolor='none', alpha = 0.6)
+
+# Plot old city boundary (transparent fill, black edge)
+old_boundary.plot(ax=ax, linewidth=1.5, edgecolor='black', facecolor='none')
+
+# Plot recent subdivisions
+recent_divisions.plot(ax=ax, linewidth=1, facecolor='grey', alpha=0.075)
+
+# Plot matched address points
+matched_address_gdf.plot(ax=ax, markersize=3, color='green', alpha=0.7)
+
+# Plot interpolated points
+interpolated_gdf.plot(ax=ax, markersize=3, color='orange', alpha=0.7)
 
 # Clean up plot
 ax.set_axis_off()
