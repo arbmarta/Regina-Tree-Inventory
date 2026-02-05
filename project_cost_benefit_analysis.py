@@ -1,8 +1,9 @@
 from pathlib import Path
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 
 # ---- CONFIG ----
 pdf_dir = Path(r"tree_inventory_pdfs")
+MERGED_NAME = "tree_inventory_merged.pdf"
 
 # OCR pricing models
 def cost_option_1(pages):
@@ -25,8 +26,14 @@ print("-" * len(header))
 total_pages = 0
 total_size_mb = 0.0
 
+# ---- COLLECT INPUT PDFs (EXCLUDING MERGED FILE) ----
+pdf_files = sorted(
+    pdf for pdf in pdf_dir.glob("*.pdf")
+    if pdf.name != MERGED_NAME
+)
+
 # ---- PER-FILE ROWS ----
-for pdf in sorted(pdf_dir.glob("*.pdf")):
+for pdf in pdf_files:
     reader = PdfReader(pdf)
     pages = len(reader.pages)
     size_mb = pdf.stat().st_size / (1024 * 1024)
@@ -60,3 +67,19 @@ print("\nCHEAPEST OPTION")
 print("----------------------")
 print(f"{best_option}")
 print(f"Cost: £{costs[best_option]:,.2f}")
+
+# ---- MERGE ALL PDFs (SAFE OVERWRITE) ----
+print("\nMerging PDFs...")
+writer = PdfWriter()
+
+for pdf in pdf_files:
+    reader = PdfReader(pdf)
+    for page in reader.pages:
+        writer.add_page(page)
+
+output_path = pdf_dir / MERGED_NAME
+
+with open(output_path, "wb") as f:
+    writer.write(f)
+
+print(f"Merged PDF replaced: {output_path}")
