@@ -53,6 +53,38 @@ def print_table(meta, rows, years):
         )
 
 
+def post_process_rows(rows):
+    """Apply carry-down rules and normalization to parsed rows."""
+
+    # 1) Lowercase species names
+    for r in rows:
+        if r.get("Species"):
+            r["Species"] = r["Species"].lower()
+
+    # 2) Where " is present in Year Planted, carry the value from the row above
+    prev_year = None
+    for r in rows:
+        yp = r.get("Year Planted")
+        if yp and yp.strip() in ('"', "''", "\u201d", "\u201c", "\""):
+            r["Year Planted"] = prev_year
+        else:
+            prev_year = yp
+
+    # 3) Where VACANT is in Year Planted but Species is blank, carry VACANT to Species
+    for r in rows:
+        yp = r.get("Year Planted") or ""
+        if yp.upper() == "VACANT" and not r.get("Species"):
+            r["Species"] = "vacant"
+            r["Year Planted"] = None
+
+    return rows
+
+
+def collect_unique_species(rows):
+    """Return sorted set of unique non-empty species values."""
+    return sorted({r["Species"] for r in rows if r.get("Species")})
+
+
 # =====================================================
 # TRIAL 3 – Structured extractor
 # =====================================================
@@ -197,10 +229,23 @@ with open("trial2.json", "r", encoding="utf-8") as f:
 
 doc = data[0]
 
+all_species = set()
+
 for page in doc["results"]:
     if "extractions" in page:
         meta, rows, years = parse_trial3_page(page)
     else:
         meta, rows, years = parse_trial2_page(page)
 
+    rows = post_process_rows(rows)
+    all_species.update(collect_unique_species(rows))
+
     print_table(meta, rows, years)
+
+# Print all unique species
+print("\n" + "=" * 60)
+print("UNIQUE SPECIES")
+print("=" * 60)
+for s in sorted(all_species):
+    print(f"  {s}")
+print(f"\nTotal unique species: {len(all_species)}")
