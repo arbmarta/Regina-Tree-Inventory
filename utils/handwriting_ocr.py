@@ -12,7 +12,7 @@ from pypdf import PdfReader, PdfWriter
 API_TOKEN = os.environ["HWOCR_API_TOKEN"]
 EXTRACTOR_ID = "Y5mPJa5zN7"
 
-BATCH_SIZE = 2
+BATCH_SIZE = 50
 POLL_INTERVAL = 3
 DELETE_AFTER_SECONDS = 1209600  # 14 days
 
@@ -24,12 +24,10 @@ HEADERS = {
 }
 
 # PATHS
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-MERGED_PDF = PROJECT_ROOT / "data" / "tree_inventories_merged.pdf"
-OUTPUT_DIR = PROJECT_ROOT / "data" / "ocr_output"
-TEMP_DIR = PROJECT_ROOT / "data" / "_temp_pages"
-LOG_PATH = PROJECT_ROOT / "data" / "processing_log.json"
+MERGED_PDF = Path("../data/tree_inventory_pdfs/tree_inventory_merged.pdf")
+OUTPUT_DIR = Path("../data/ocr_output")
+TEMP_DIR = Path("../data/_temp_pages")
+LOG_PATH = Path("../data/processing_log.json")
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -43,7 +41,9 @@ def load_log():
 def save_log(log):
     tmp = LOG_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(log, indent=2))
-    tmp.replace(LOG_PATH)
+    if LOG_PATH.exists():
+        LOG_PATH.unlink()
+    tmp.rename(LOG_PATH)
 
 # RETRY HELPER
 def retry_request(fn, retries=3, delay=3):
