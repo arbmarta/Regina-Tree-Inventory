@@ -1,2 +1,6 @@
-.venv
+.venv/
+.idea/
 tree_inventory_pdfs
+
+# File that includes the API token
+/.env

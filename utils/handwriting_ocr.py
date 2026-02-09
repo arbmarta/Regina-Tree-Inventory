@@ -1,15 +1,20 @@
 import time
+import json
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import requests
 from pathlib import Path
 from pypdf import PdfReader, PdfWriter
-from tqdm import tqdm
 
-# Config
-API_TOKEN = "YOUR_API_TOKEN_HERE" # Add personal API token
-EXTRACTOR_ID = "Y5mPJa5zN7" # Add extractor ID from the website
+# CONFIG
+API_TOKEN = os.environ["HWOCR_API_TOKEN"]
+EXTRACTOR_ID = "Y5mPJa5zN7"
 
+BATCH_SIZE = 2
+POLL_INTERVAL = 3
 DELETE_AFTER_SECONDS = 1209600  # 14 days
-POLL_INTERVAL = 3  # seconds (rate-limit safe)
 
 BASE_URL = "https://www.handwritingocr.com/api/v3/documents"
 
@@ -18,39 +23,53 @@ HEADERS = {
     "Accept": "application/json",
 }
 
-# Path Setup (script lives in utils/)
+# PATHS
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-PDF_DIR = PROJECT_ROOT / "data" / "tree_inventory_pdfs"
+MERGED_PDF = PROJECT_ROOT / "data" / "tree_inventories_merged.pdf"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "ocr_output"
-TEMP_PAGE_DIR = PROJECT_ROOT / "data" / "_temp_pages"
+TEMP_DIR = PROJECT_ROOT / "data" / "_temp_pages"
+LOG_PATH = PROJECT_ROOT / "data" / "processing_log.json"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-TEMP_PAGE_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-# Helpers
-def split_pdf_to_pages(pdf_path: Path, output_dir: Path):
-    reader = PdfReader(pdf_path)
-    output_dir.mkdir(exist_ok=True)
+# LOG HELPERS (atomic write)
+def load_log():
+    if LOG_PATH.exists():
+        return json.loads(LOG_PATH.read_text())
+    return {}
 
-    page_paths = []
+def save_log(log):
+    tmp = LOG_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(log, indent=2))
+    tmp.replace(LOG_PATH)
 
-    for i, page in enumerate(reader.pages, start=1):
-        writer = PdfWriter()
-        writer.add_page(page)
+# RETRY HELPER
+def retry_request(fn, retries=3, delay=3):
+    for attempt in range(retries):
+        try:
+            return fn()
+        except requests.RequestException:
+            if attempt == retries - 1:
+                raise
+            time.sleep(delay)
 
-        page_path = output_dir / f"page_{i:04d}.pdf"
-        with open(page_path, "wb") as f:
-            writer.write(f)
+# PDF HELPERS
+def extract_page(reader: PdfReader, page_number: int) -> Path:
+    writer = PdfWriter()
+    writer.add_page(reader.pages[page_number - 1])
 
-        page_paths.append(page_path)
+    out_path = TEMP_DIR / f"page_{page_number:06d}.pdf"
+    with open(out_path, "wb") as f:
+        writer.write(f)
 
-    return page_paths
+    return out_path
 
-
+# API HELPERS
 def upload_page(page_path: Path) -> str:
     with open(page_path, "rb") as f:
-        response = requests.post(
+        r = requests.post(
             BASE_URL,
             headers=HEADERS,
             files={"file": f},
@@ -60,95 +79,114 @@ def upload_page(page_path: Path) -> str:
                 "delete_after": DELETE_AFTER_SECONDS,
             },
         )
+    r.raise_for_status()
+    return r.json()["id"]
 
-    response.raise_for_status()
-    return response.json()["id"]
+def wait_for_processing(doc_id: str, max_attempts=120):
+    attempts = 0
+    while attempts < max_attempts:
+        r = requests.get(f"{BASE_URL}/{doc_id}", headers=HEADERS)
 
-
-def wait_for_processing(doc_id: str):
-    while True:
-        response = requests.get(f"{BASE_URL}/{doc_id}", headers=HEADERS)
-
-        if response.status_code == 202:
+        if r.status_code == 202:
             time.sleep(POLL_INTERVAL)
+            attempts += 1
             continue
 
-        if response.status_code == 429:
-            retry_after = int(response.headers.get("Retry-After", POLL_INTERVAL))
+        if r.status_code == 429:
+            retry_after = int(r.headers.get("Retry-After", POLL_INTERVAL))
             time.sleep(retry_after)
             continue
 
-        response.raise_for_status()
+        r.raise_for_status()
 
-        if response.json()["status"] == "processed":
+        if r.json().get("status") == "processed":
             return
 
         time.sleep(POLL_INTERVAL)
+        attempts += 1
 
+    raise TimeoutError(f"OCR timed out for doc_id={doc_id}")
 
-def download_json(doc_id: str, output_path: Path):
-    response = requests.get(
-        f"{BASE_URL}/{doc_id}.json",
-        headers=HEADERS,
-        stream=True,
-    )
+def download_json(doc_id: str, page_number: int, max_attempts=20):
+    out_file = OUTPUT_DIR / f"page_{page_number:06d}.json"
+    attempts = 0
 
-    if response.status_code == 429:
-        retry_after = int(response.headers.get("Retry-After", POLL_INTERVAL))
-        time.sleep(retry_after)
-        response = requests.get(
-            f"{BASE_URL}/{doc_id}.json",
-            headers=HEADERS,
-            stream=True,
-        )
+    while attempts < max_attempts:
+        r = requests.get(f"{BASE_URL}/{doc_id}.json", headers=HEADERS)
 
-    response.raise_for_status()
+        if r.status_code == 429:
+            retry_after = int(r.headers.get("Retry-After", POLL_INTERVAL))
+            time.sleep(retry_after)
+            attempts += 1
+            continue
 
-    with open(output_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+        r.raise_for_status()
+        out_file.write_bytes(r.content)
+        return
 
+    raise TimeoutError(f"Download timed out for doc_id={doc_id}")
 
-# Main
+# MAIN PIPELINE (LOOPS UNTIL DONE)
 def main():
-    pdf_files = sorted(
-        PDF_DIR.glob("*.pdf"),
-        key=lambda p: p.stat().st_size,
-    )
+    log = load_log()
+    reader = PdfReader(MERGED_PDF)
+    total_pages = len(reader.pages)
 
-    print(f"Found {len(pdf_files)} PDFs")
+    print(f"Total pages: {total_pages}")
 
-    for pdf_path in pdf_files:
-        pdf_name = pdf_path.stem
-        print(f"\n=== {pdf_name} ===")
+    while True:
+        # Determine next batch
+        unprocessed = [
+            i for i in range(1, total_pages + 1)
+            if log.get(str(i), {}).get("status") != "processed"
+        ]
 
-        pdf_output_dir = OUTPUT_DIR / pdf_name
-        pdf_output_dir.mkdir(exist_ok=True)
+        if not unprocessed:
+            print("All pages processed.")
+            return
 
-        temp_pages_dir = TEMP_PAGE_DIR / pdf_name
-        temp_pages_dir.mkdir(exist_ok=True)
+        batch = unprocessed[:BATCH_SIZE]
+        print(f"\nProcessing batch: pages {batch[0]} → {batch[-1]}")
 
-        page_paths = split_pdf_to_pages(pdf_path, temp_pages_dir)
+        # -----------------------------
+        # PHASE 1: UPLOAD
+        # -----------------------------
+        for page_number in batch:
+            if log.get(str(page_number), {}).get("status") == "submitted":
+                continue
 
-        with tqdm(page_paths, desc=f"{pdf_name}", unit="page") as pages:
-            for page_path in pages:
-                page_number = page_path.stem.split("_")[1]
-                output_json = pdf_output_dir / f"page_{page_number}.json"
+            print(f"Uploading page {page_number}")
+            page_pdf = extract_page(reader, page_number)
 
-                if output_json.exists():
-                    pages.set_postfix_str(f"page {page_number} (skipped)")
-                    continue
+            doc_id = retry_request(lambda p=page_pdf: upload_page(p))
 
-                pages.set_postfix_str(f"page {page_number}")
+            log[str(page_number)] = {
+                "doc_id": doc_id,
+                "status": "submitted"
+            }
+            save_log(log)
 
-                doc_id = upload_page(page_path)
-                wait_for_processing(doc_id)
-                download_json(doc_id, output_json)
+            page_pdf.unlink()
+            time.sleep(1)
 
-                time.sleep(1)
+        # -----------------------------
+        # PHASE 2: DOWNLOAD
+        # -----------------------------
+        for page_number in batch:
+            entry = log.get(str(page_number))
+            if not entry or entry["status"] != "submitted":
+                continue
 
-    print("\nAll PDFs processed.")
+            doc_id = entry["doc_id"]
+            print(f"Downloading page {page_number}")
 
+            wait_for_processing(doc_id)
+            download_json(doc_id, page_number)
+
+            entry["status"] = "processed"
+            save_log(log)
+
+            time.sleep(1)
 
 if __name__ == "__main__":
     main()
