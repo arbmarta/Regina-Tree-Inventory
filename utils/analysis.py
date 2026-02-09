@@ -199,7 +199,8 @@ species_dict = {
     "Pole": "No space",
     "Street light": "No space",
     "Driveway": "No space",
-    "No room": "No space"}
+    "No room": "No space"
+}
 
 
 
@@ -224,7 +225,7 @@ print("\n")
 #region
 
 # Import address points shapefile
-address_points = gpd.read_file("Property Locations/AddressPoint.shp") # columns STREET and FULLADDRSS
+address_points = gpd.read_file("Property Locations/address_points.shp") # columns STREET and FULLADDRSS
 
 # Normalize street and address columns
 df['Street'] = df['Street'].astype(str).str.strip().str.lower()
@@ -269,7 +270,7 @@ else:
 matched_address_gdf = address_points[address_points['FULLADDRSS'].isin(df['Full Address'])]
 
 # Import road centerlines, current city boundary, and subdivision shapefiles
-roads = gpd.read_file("Roads/RoadCenterline.shp")
+roads = gpd.read_file("Roads/road_centerline.shp")
 boundary = gpd.read_file("City Limits/CityLimits.shp")
 divisions = gpd.read_file("Subdivisions/YearofDevelopment.shp")
 
@@ -397,7 +398,7 @@ print(f"\n✅ Interpolated {len(interpolated_gdf)} unmatched addresses.")
 matched_address_gdf = address_points[address_points['FULLADDRSS'].isin(df['Full Address'])]
 
 # Import road centerlines, current city boundary, and subdivision shapefiles
-roads = gpd.read_file("Roads/RoadCenterline.shp")
+roads = gpd.read_file("Roads/road_centerline.shp")
 boundary = gpd.read_file("City Limits/CityLimits.shp")
 divisions = gpd.read_file("Subdivisions/YearofDevelopment.shp")
 
