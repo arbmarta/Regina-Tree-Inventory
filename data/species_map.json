@@ -99,6 +99,32 @@
   "green ash": "Fraxinus pennsylvanica",
   "greenash": "Fraxinus pennsylvanica",
 
+  "b.a": "Fraxinus nigra",
+
+  "m. ash": "Sorbus aucuparia",
+  "mnt ash": "Sorbus aucuparia",
+  "mnt. ash": "Sorbus aucuparia",
+  "moun. ash": "Sorbus aucuparia",
+
+  "man maple": "Acer negundo",
+  "man. maple": "Acer negundo",
+  "mt. maple": "Acer ginnala",
+
+  "ch. cherry": "Prunus virginiana",
+  "dr. cherry": "Prunus virginiana",
+  "shubert c.c": "Prunus virginiana 'Schubert'",
+  "lit. linden": "Tilia cordata",
+  "w. birch": "Betula papyrifera",
+  "wht birch": "Betula papyrifera",
+  "wht. birch": "Betula papyrifera",
+  "wp. birch": "Betula papyrifera",
+  "wh. spruce": "Picea glauca",
+  "wht spruce": "Picea glauca",
+  "wht. spruce": "Picea glauca",
+  "wht-spruce": "Picea glauca",
+  "norway": "Picea abies",
+  "green ash elm": "error",
+
   "maple": "Acer",
   "manitoba maple": "Acer negundo",
   "amur maple": "Acer ginnala",

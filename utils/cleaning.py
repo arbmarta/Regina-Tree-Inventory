@@ -38,6 +38,14 @@ def post_process_rows(rows, species_map):
             s = re.sub(r"[.,;:]+$", "", s)
             r["Species"] = s
 
+    prev_species = None
+    for r in rows:
+        s = r.get("Species")
+        if s == '"':
+            r["Species"] = prev_species
+        elif s:
+            prev_species = s
+
     for r in rows:
         species = r.get("Species")
         if species in species_map:
