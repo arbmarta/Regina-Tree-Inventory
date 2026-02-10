@@ -268,6 +268,49 @@
   "removed": "removed",
   "vacant": "vacant",
 
+    "american elm (p?)": "status error",
+  "american elm green ash": "error",
+  "apple mountain ash": "error",
+  "apple white spruce pvt": "error",
+
+  "argyle park housing co-op argyle st. n": null,
+  "argyle st north shopping centre": null,
+
+  "basswood": "Tilia americana",
+  "boleana poplar": "Populus alba 'Bolleana'",
+  "elder": "Sambucus",
+
+  "green ash (d?)": "status error",
+  "green ash manchurian elm": "error",
+
+  "hawthorn": "Crataegus",
+
+  "manitoba maple l.l. linden": "error",
+  "manthurian elm": "Ulmus laciniata",
+
+  "mugo pine colorado spruce": "error",
+
+  "mulberry": "Morus",
+
+  "nw poplar": "Populus x jackii 'Northwest'",
+
+  "pin cherry": "Prunus pensylvanica",
+
+  "pine": "Pinus",
+
+  "root birch": "status error",
+
+  "rose bush": "Rosa",
+
+  "scotch pine colorado spruce": "error",
+  "scotch pine pvt maple": "error",
+  "scotch pine pvt white spruce": "error",
+
+  "vac": "vacant",
+
+  "white pine": "Pinus strobus",
+  "white spruce pvt": "status error",
+
   "bus stop": null,
   "driveby": null,
   "driveway": null,
