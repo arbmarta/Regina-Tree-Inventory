@@ -367,5 +367,40 @@
   "right standard": null,
   "sewer": null,
   "stones": null,
-  "wishing well": null
+  "wishing well": null,
+
+    "blue spruce": "Picea pungens",
+  "col blue spruce": "Picea pungens",
+
+  "buffalo berry": "Shepherdia argentea",
+
+  "cut leaf wpg birch": "Betula pendula",
+
+  "flowering crab apple": "Malus",
+
+  "green ash man. maple": "error",
+  "green maple ash": "error",
+
+  "h. suckle aster": "error",
+
+  "jack mugo pine": "error",
+
+  "lamp": null,
+
+  "laurel leaf willow": "Salix pentandra",
+
+  "royalty flow. crab": "Malus",
+    "address": null,
+
+  "american green ash": "Fraxinus pennsylvanica",
+
+  "dead gr. ash": "status error",
+  "green ash dead": "status error",
+
+  "no": null,
+  "such": null,
+
+  "vacant no room": "status error",
+
+  "weeping birch green ash": "error"
 }
