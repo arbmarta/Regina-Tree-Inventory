@@ -258,8 +258,13 @@
   "douglas fir": "Pseudotsuga menziesii",
   "beaked willow": "Salix bebbiana",
 
-  "r wood": "r wood",
-
+  "r wood": "Cornus sericea",
+  "am linden": "Tilia americana",
+  "cotoneaster no tree": "status error",
+  "manch elm": "Ulmus laciniata",
+  "redozier dogwood": "Cornus sericea",
+  "sugar maple": "Acer saccharum",
+  "tremb aspen": "Populus tremuloides",
   "removed": "removed",
   "vacant": "vacant",
 
