@@ -104,6 +104,14 @@ def parse_page_json(data, page_number=None):
                 year += 1900
             if year == 1880:
                 year = 1990
+            if year == 1951:
+                year = 1981
+            if year == 1927:
+                year = 1987
+            if year == 1956:
+                year = 1981
+            if year == 1959:
+                year = 1987
             years.append(year)
     years = sorted(years)
 
