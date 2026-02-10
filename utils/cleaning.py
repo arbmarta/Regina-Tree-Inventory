@@ -1,11 +1,16 @@
 import json
+import csv
 import re
+from pathlib import Path
 from collections import defaultdict
 
-# =====================================================
-# Helpers
-# =====================================================
+# PATHS
+OCR_OUTPUT_DIR = Path("../data/ocr_output")
+MERGED_JSON = Path("../data/tree_inventories_merged.json")
+MERGED_CSV = Path("../data/tree_inventories_merged.csv")
+SPECIES_MAP_PATH = Path("../data/species_map.json")
 
+# Helpers
 def clean(v):
     if v in (None, "", "nan"):
         return ""
@@ -18,50 +23,22 @@ def normalize_blank(v):
     return str(v).strip()
 
 
-def print_table(meta, rows, years):
-    print("\n" + "=" * 160)
-    print(f"Street: {meta.get('street')}")
-    print(f"Block : {meta.get('block')}")
-    print(f"Sector: {meta.get('sector')}")
-    print("-" * 160)
-
-    base_headers = [
-        "Street Number",
-        "Tree No.",
-        "Species",
-        "Year Planted",
-    ]
-
-    # 🔑 Heights first, then diameters
-    height_headers = [f"Height ({y})" for y in years]
-    diameter_headers = [f"Diameter ({y})" for y in years]
-
-    headers = base_headers + height_headers + diameter_headers
-
-    widths = {h: len(h) for h in headers}
-    for r in rows:
-        for h in headers:
-            widths[h] = max(widths[h], len(clean(r.get(h))))
-
-    header_line = " | ".join(h.ljust(widths[h]) for h in headers)
-    print(header_line)
-    print("-" * len(header_line))
-
-    for r in rows:
-        print(
-            " | ".join(clean(r.get(h)).ljust(widths[h]) for h in headers)
-        )
+def load_species_map():
+    if SPECIES_MAP_PATH.exists():
+        return json.loads(SPECIES_MAP_PATH.read_text(encoding="utf-8"))
+    return {}
 
 
-def post_process_rows(rows):
-    """Apply carry-down rules and normalization to parsed rows."""
-
-    # 1) Lowercase species names
+def post_process_rows(rows, species_map):
     for r in rows:
         if r.get("Species"):
             r["Species"] = r["Species"].lower()
 
-    # 2) Where " is present in Year Planted, carry the value from the row above
+    for r in rows:
+        species = r.get("Species")
+        if species in species_map:
+            r["Species"] = species_map[species]
+
     prev_year = None
     for r in rows:
         yp = r.get("Year Planted")
@@ -70,7 +47,6 @@ def post_process_rows(rows):
         else:
             prev_year = yp
 
-    # 3) Where VACANT is in Year Planted but Species is blank, carry VACANT to Species
     for r in rows:
         yp = r.get("Year Planted") or ""
         if yp.upper() == "VACANT" and not r.get("Species"):
@@ -80,15 +56,7 @@ def post_process_rows(rows):
     return rows
 
 
-def collect_unique_species(rows):
-    """Return sorted set of unique non-empty species values."""
-    return sorted({r["Species"] for r in rows if r.get("Species")})
-
-
-# =====================================================
-# TRIAL 3 – Structured extractor
-# =====================================================
-
+# Parser (structured extractor JSON)
 def fields_by_name(field_list):
     return {f["name"]: f for f in field_list}
 
@@ -97,21 +65,30 @@ def row_by_name(row_list):
     return {f["name"]: f for f in row_list}
 
 
-def parse_trial3_page(page):
+def parse_page_json(data, page_number=None):
+    page = data["results"][0]
     raw_fields = page["extractions"][0]
     fields = fields_by_name(raw_fields)
 
     meta = {
-        "street": fields["street"]["value"],
-        "block": fields["block"]["value"],
-        "sector": fields["sector"]["value"],
+        "street": clean(fields["street"]["value"]),
+        "block": clean(fields["block"]["value"]),
+        "sector": clean(fields["sector"]["value"]),
     }
 
     years = []
     for slot in range(1, 6):
         y = fields.get(f"year_{slot}", {}).get("value")
         if y and y != "nan":
-            years.append(int(y))
+            digits = re.sub(r"[^0-9]", "", y)
+            if not digits:
+                continue
+            if digits != y.strip():
+                print(f"  Warning [page {page_number}]: year_{slot} = '{y}' → {digits}")
+            year = int(digits)
+            if year < 100:
+                year += 1900
+            years.append(year)
     years = sorted(years)
 
     temp = defaultdict(dict)
@@ -122,7 +99,7 @@ def parse_trial3_page(page):
 
             key = (
                 row["street_number"]["value"],
-                row["tree_no"]["value"]
+                row["tree_no"]["value"],
             )
 
             if key not in temp:
@@ -136,116 +113,71 @@ def parse_trial3_page(page):
             h = row.get(f"height_{slot}", {}).get("value")
             d = row.get(f"diameter_{slot}", {}).get("value")
 
-            temp[key][f"Height ({year})"] = h
-            temp[key][f"Diameter ({year})"] = d
+            temp[key][f"Height ({year})"] = normalize_blank(h)
+            temp[key][f"Diameter ({year})"] = normalize_blank(d)
 
-    return meta, list(temp.values()), years
+    rows = list(temp.values())
 
+    for r in rows:
+        r["Street"] = meta["street"]
+        r["Block"] = meta["block"]
+        r["Sector"] = meta["sector"]
 
-# =====================================================
-# TRIAL 2 – Transcript, inline multi-year
-# =====================================================
-
-def extract_meta_from_transcript(text):
-    meta = {}
-    for key in ["STREET", "BLOCK", "SECTOR"]:
-        m = re.search(rf"{key}[:\s]+(.+)", text, re.IGNORECASE)
-        meta[key.lower()] = m.group(1).strip() if m else None
-    return meta
+    return rows, years
 
 
-def extract_years_from_transcript(text):
-    m = re.search(r"\b(19\d{2})\s+(\d{2})\b", text)
-    if not m:
-        return []
-    return [int(m.group(1)), 1900 + int(m.group(2))]
-
-
-def parse_trial2_page(page):
-    text = page["transcript"]
-    meta = extract_meta_from_transcript(text)
-    years = extract_years_from_transcript(text)
-
-    temp = defaultdict(dict)
-    current_street = None
-
-    for line in text.splitlines():
-        line = line.strip()
-        if not line.startswith("|"):
-            continue
-
-        upper = line.upper()
-        if (
-            "STREET NUMBER" in upper
-            or "HEIGHT FEET" in upper
-            or "DIAMETER" in upper
-            or set(line.replace("|", "").strip()) == {"-"}
-        ):
-            continue
-
-        cells = [c.strip() or None for c in line.strip("|").split("|")]
-        if len(cells) < 6:
-            continue
-
-        street_no, tree_no, species, year_planted, h_cell, d_cell = cells[:6]
-
-        if street_no:
-            current_street = street_no
-        else:
-            street_no = current_street
-
-        if not tree_no:
-            continue
-
-        key = (street_no, tree_no)
-
-        if key not in temp:
-            temp[key] = {
-                "Street Number": street_no,
-                "Tree No.": tree_no,
-                "Species": normalize_blank(species),
-                "Year Planted": normalize_blank(year_planted),
-            }
-
-        heights = [] if not h_cell else h_cell.replace("--", "").split()
-        diams   = [] if not d_cell else d_cell.replace("--", "").split()
-
-        for i, year in enumerate(years):
-            h = heights[i] if i < len(heights) else None
-            d = diams[i] if i < len(diams) else None
-
-            temp[key][f"Height ({year})"] = h
-            temp[key][f"Diameter ({year})"] = d
-
-    return meta, list(temp.values()), years
-
-
-# =====================================================
 # MAIN
-# =====================================================
+def main():
+    json_files = sorted(OCR_OUTPUT_DIR.glob("page_*.json"))
+    print(f"Found {len(json_files)} JSON files")
 
-with open("trial2.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
+    all_rows = []
+    all_years = set()
+    species_map = load_species_map()
 
-doc = data[0]
+    for jf in json_files:
+        try:
+            page_number = jf.stem.split("_")[1]
+            data = json.loads(jf.read_text(encoding="utf-8"))
+            rows, years = parse_page_json(data, page_number)
+            rows = post_process_rows(rows, species_map)
+            all_rows.extend(rows)
+            all_years.update(years)
+        except Exception as e:
+            print(f"Error parsing {jf.name}: {e}")
+            continue
 
-all_species = set()
+    all_years = sorted(all_years)
+    print(f"Parsed {len(all_rows)} tree records across {len(json_files)} pages")
 
-for page in doc["results"]:
-    if "extractions" in page:
-        meta, rows, years = parse_trial3_page(page)
-    else:
-        meta, rows, years = parse_trial2_page(page)
+    print(f"\nSurvey years found: {all_years}")
 
-    rows = post_process_rows(rows)
-    all_species.update(collect_unique_species(rows))
+    unique_species = sorted({r["Species"] for r in all_rows if r.get("Species")})
+    print(f"\nUnique species ({len(unique_species)}):")
+    for s in unique_species:
+        print(f"  {s}")
 
-    print_table(meta, rows, years)
+    # --- Save merged JSON ---
+    MERGED_JSON.write_text(json.dumps(all_rows, indent=2), encoding="utf-8")
 
-# Print all unique species
-print("\n" + "=" * 60)
-print("UNIQUE SPECIES")
-print("=" * 60)
-for s in sorted(all_species):
-    print(f"  {s}")
-print(f"\nTotal unique species: {len(all_species)}")
+    # --- Save merged CSV ---
+    base_cols = ["Street", "Block", "Sector", "Street Number", "Tree No.", "Species", "Year Planted"]
+    year_cols = []
+    for y in all_years:
+        year_cols.append(f"Height ({y})")
+        year_cols.append(f"Diameter ({y})")
+
+    fieldnames = base_cols + year_cols
+
+    with open(MERGED_CSV, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in all_rows:
+            writer.writerow({k: clean(row.get(k)) for k in fieldnames})
+
+    print(f"\nSaved {MERGED_JSON}")
+    print(f"Saved {MERGED_CSV}")
+
+
+if __name__ == "__main__":
+    main()
