@@ -45,6 +45,31 @@ def load_species_map():
     return species_map
 
 
+def normalize_street_direction(street):
+    if not street:
+        return street
+
+    street = street.lower()
+
+    replacements = {
+        r"\bn\.?\b": "north",
+        r"\bs\.?\b": "south",
+        r"\be\.?\b": "east",
+        r"\bw\.?\b": "west",
+        r"\bne\.?\b": "northeast",
+        r"\bnw\.?\b": "northwest",
+        r"\bse\.?\b": "southeast",
+        r"\bsw\.?\b": "southwest",
+    }
+
+    for pattern, repl in replacements.items():
+        street = re.sub(pattern, repl, street)
+
+    # collapse extra spaces
+    street = re.sub(r"\s+", " ", street).strip()
+    return street
+
+
 def post_process_rows(rows, species_map):
     for r in rows:
         if r.get("Species"):
@@ -101,7 +126,7 @@ def parse_page_json(data, page_number=None):
     fields = fields_by_name(raw_fields)
 
     meta = {
-        "street": clean(fields["street"]["value"]).lower(),
+        "street": normalize_street_direction(clean(fields["street"]["value"])),
         "block": clean(fields["block"]["value"]),
         "sector": clean(fields["sector"]["value"]),
     }
@@ -131,6 +156,9 @@ def parse_page_json(data, page_number=None):
             years.append(year)
     years = sorted(years)
 
+    # Build a comma-separated string of the years for this page
+    years_str = ", ".join(str(y) for y in years)
+
     temp = defaultdict(dict)
 
     for slot, year in enumerate(years, start=1):
@@ -143,18 +171,21 @@ def parse_page_json(data, page_number=None):
             )
 
             if key not in temp:
+                raw_species = normalize_blank(row["species"]["value"])
+
                 temp[key] = {
                     "Street Number": row["street_number"]["value"],
                     "Tree No.": row["tree_no"]["value"],
-                    "Species": normalize_blank(row["species"]["value"]),
+                    "Species (raw)": raw_species,
+                    "Species": raw_species,
                     "Year Planted": normalize_blank(row["year_planted"]["value"]),
                 }
 
             h = row.get(f"height_{slot}", {}).get("value")
             d = row.get(f"diameter_{slot}", {}).get("value")
 
-            temp[key][f"Height ({year})"] = normalize_blank(h)
-            temp[key][f"Diameter ({year})"] = normalize_blank(d)
+            temp[key][f"Height {slot}"] = normalize_blank(h)
+            temp[key][f"Diameter {slot}"] = normalize_blank(d)
 
     rows = list(temp.values())
 
@@ -163,6 +194,7 @@ def parse_page_json(data, page_number=None):
         r["Street"] = meta["street"]
         r["Block"] = meta["block"]
         r["Sector"] = meta["sector"]
+        r["Years"] = years_str
 
     return rows, years
 
@@ -178,7 +210,7 @@ def main():
     print(f"Found {len(json_files)} JSON files")
 
     all_rows = []
-    all_years = set()
+    max_year_slots = 0
     species_map = load_species_map()
 
     for jf in json_files:
@@ -188,15 +220,14 @@ def main():
             rows, years = parse_page_json(data, page_number)
             rows = post_process_rows(rows, species_map)
             all_rows.extend(rows)
-            all_years.update(years)
+            if len(years) > max_year_slots:
+                max_year_slots = len(years)
         except Exception as e:
             print(f"Error parsing {jf.name}: {e}")
             continue
 
-    all_years = sorted(all_years)
     print(f"Parsed {len(all_rows)} tree records across {len(json_files)} pages")
-
-    print(f"\nSurvey years found: {all_years}")
+    print(f"Max year slots on any page: {max_year_slots}")
 
     mapped = sorted({r["Species"] for r in all_rows if r.get("Species") and not r.get("_unmapped")})
     unmapped = sorted({r["Species"] for r in all_rows if r.get("Species") and r.get("_unmapped")})
@@ -214,13 +245,11 @@ def main():
     MERGED_JSON.write_text(json.dumps(all_rows, indent=2), encoding="utf-8")
 
     # --- Save merged CSV ---
-    base_cols = ["Page", "Street", "Block", "Sector", "Street Number", "Tree No.", "Species", "Year Planted"]
-    height_cols = [f"Height ({y})" for y in all_years]
-    diameter_cols = [f"Diameter ({y})" for y in all_years]
+    base_cols = ["Page", "Street", "Block", "Sector", "Street Number", "Tree No.", "Species (raw)", "Species", "Year Planted", "Years"]
+    height_cols = [f"Height {s}" for s in range(1, max_year_slots + 1)]
+    diameter_cols = [f"Diameter {s}" for s in range(1, max_year_slots + 1)]
 
-    year_cols = height_cols + diameter_cols
-
-    fieldnames = base_cols + year_cols
+    fieldnames = base_cols + height_cols + diameter_cols
 
     with open(MERGED_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
