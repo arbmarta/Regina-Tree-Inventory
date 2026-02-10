@@ -101,7 +101,7 @@ def parse_page_json(data, page_number=None):
     fields = fields_by_name(raw_fields)
 
     meta = {
-        "street": clean(fields["street"]["value"]),
+        "street": clean(fields["street"]["value"]).lower(),
         "block": clean(fields["block"]["value"]),
         "sector": clean(fields["sector"]["value"]),
     }
