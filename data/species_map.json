@@ -38,6 +38,7 @@
   "patmore ash fall 92": "status error",
   "no room.": "status error",
   "no room green ash": "status error",
+  "cotoneaster driveway.": "status error",
 
   "am elm": "Ulmus americana",
   "am. elm": "Ulmus americana",
@@ -51,6 +52,7 @@
   "amer elm": "Ulmus americana",
   "machurian elm": "Ulmus laciniata",
   "manch": "Ulmus laciniata",
+  "am. elm/linwood": "Ulmus americana",
 
   "g.a.": "Fraxinus pennsylvanica",
   "p.a.": "Fraxinus pennsylvanica 'Patmore'",
@@ -60,6 +62,8 @@
   "ash": "Fraxinus",
   "bergeson ash": "Fraxinus pennsylvanica 'Bergeson'",
   "patmore ash": "Fraxinus pennsylvanica 'Patmore'",
+  "black ash": "Fraxinus nigra",
+  "manchurian ash": "Fraxinus mandshurica",
 
   "manitoba maple": "Acer negundo",
   "amur maple": "Acer ginnala",
@@ -75,8 +79,19 @@
   "crab apple": "Malus",
 
   "mayday": "Prunus padus",
+  "may day": "Prunus padus",
   "shubert ch. cherry": "Prunus virginiana 'Schubert'",
   "shubert chokecherry": "Prunus virginiana 'Schubert'",
+  "amur cherry": "Prunus maackii",
+  "plum": "Prunus",
+  "choke cherry": "Prunus virginiana",
+  "chokecherry": "Prunus virginiana",
+  "shubert": "Prunus virginiana 'Schubert'",
+  "shubert cherry": "Prunus virginiana 'Schubert'",
+  "shubert choke cherry": "Prunus virginiana 'Schubert'",
+  "choke cherry schubert": "Prunus virginiana 'Schubert'",
+  "russian almond": "Prunus tenella",
+  "pt. amygd": "Prunus amygdalus",
 
   "honey suckle": "Lonicera",
   "honeysuckle": "Lonicera",
@@ -104,10 +119,14 @@
 
   "willow": "Salix",
   "laurel willow": "Salix pentandra",
+  "weeping willow": "Salix babylonica",
+
+  "cotoneaster": "Cotoneaster",
+  "cotone aster hedge": "Cotoneaster",
+  "cotoneaster hedge": "Cotoneaster",
 
   "lilac": "Syringa vulgaris",
   "weigela": "Weigela florida",
-  "cotoneaster": "Cotoneaster",
   "currant": "Ribes",
   "caragana": "Caragana arborescens",
   "russian olive": "Elaeagnus angustifolia",
@@ -131,6 +150,7 @@
   "white spruce": "Picea glauca",
   "colorado spruce": "Picea pungens",
   "white colorado spruce": "Picea pungens",
+  "colorado blue spruce": "Picea pungens",
 
   "scotch pine": "Pinus sylvestris",
   "jack pine": "Pinus banksiana",

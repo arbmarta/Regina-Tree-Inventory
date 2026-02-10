@@ -38,6 +38,8 @@ def post_process_rows(rows, species_map):
         species = r.get("Species")
         if species in species_map:
             r["Species"] = species_map[species]
+        elif species:
+            r["_unmapped"] = True
 
     prev_year = None
     for r in rows:
@@ -152,10 +154,17 @@ def main():
 
     print(f"\nSurvey years found: {all_years}")
 
-    unique_species = sorted({r["Species"] for r in all_rows if r.get("Species")})
-    print(f"\nUnique species ({len(unique_species)}):")
-    for s in unique_species:
+    mapped = sorted({r["Species"] for r in all_rows if r.get("Species") and not r.get("_unmapped")})
+    unmapped = sorted({r["Species"] for r in all_rows if r.get("Species") and r.get("_unmapped")})
+
+    print(f"\nMapped species ({len(mapped)}):")
+    for s in mapped:
         print(f"  {s}")
+
+    if unmapped:
+        print(f"\nUnmapped species ({len(unmapped)}):")
+        for s in unmapped:
+            print(f"  {s}")
 
     # --- Save merged JSON ---
     MERGED_JSON.write_text(json.dumps(all_rows, indent=2), encoding="utf-8")
