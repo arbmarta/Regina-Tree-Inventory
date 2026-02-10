@@ -4,11 +4,15 @@ import re
 from pathlib import Path
 from collections import defaultdict
 
+# Specify page range
+FIRST_PAGE = 1
+LAST_PAGE = 1000
+
 # PATHS
 OCR_OUTPUT_DIR = Path("../data/ocr_output")
-MERGED_JSON = Path("../data/tree_inventories_merged.json")
-MERGED_CSV = Path("../data/tree_inventories_merged.csv")
-SPECIES_MAP_PATH = Path("../data/species_map.json")
+MERGED_JSON = Path(f"../data/pages_{FIRST_PAGE}_to_{LAST_PAGE}.json")
+MERGED_CSV = Path(f"../data/pages_{FIRST_PAGE}_to_{LAST_PAGE}.csv")
+SPECIES_MAP_PATH = Path("../data/species_map.csv")
 
 # Helpers
 def clean(v):
@@ -24,9 +28,21 @@ def normalize_blank(v):
 
 
 def load_species_map():
-    if SPECIES_MAP_PATH.exists():
-        return json.loads(SPECIES_MAP_PATH.read_text(encoding="utf-8"))
-    return {}
+    species_map = {}
+
+    if not SPECIES_MAP_PATH.exists():
+        return species_map
+
+    with open(SPECIES_MAP_PATH, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            raw = clean(row.get("common name")).lower()
+            common = clean(row.get("species"))
+
+            if raw and common:
+                species_map[raw] = common
+
+    return species_map
 
 
 def post_process_rows(rows, species_map):
@@ -154,6 +170,11 @@ def parse_page_json(data, page_number=None):
 # MAIN
 def main():
     json_files = sorted(OCR_OUTPUT_DIR.glob("page_*.json"))
+    json_files = [
+        jf for jf in json_files
+        if FIRST_PAGE <= int(jf.stem.split("_")[1]) <= LAST_PAGE
+    ]
+
     print(f"Found {len(json_files)} JSON files")
 
     all_rows = []

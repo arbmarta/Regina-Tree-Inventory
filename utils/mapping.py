@@ -16,7 +16,7 @@ address_points = gpd.read_file('../data/shapefiles/address_points.shp')
 road_centerline = gpd.read_file('../data/shapefiles/road_centerline.shp')
 
 # low_memory=False avoids dtype warnings; does NOT change data
-trees = pd.read_csv('../data/tree_inventories_merged.csv', low_memory=False)
+trees = pd.read_csv('../data/pages_1_to_1000.csv', low_memory=False)
 
 print("Loaded:")
 print(f"  Address points: {len(address_points)}")
