@@ -32,7 +32,11 @@ def load_species_map():
 def post_process_rows(rows, species_map):
     for r in rows:
         if r.get("Species"):
-            r["Species"] = r["Species"].lower()
+            s = r["Species"].lower().strip()
+
+            # remove trailing punctuation
+            s = re.sub(r"[.,;:]+$", "", s)
+            r["Species"] = s
 
     for r in rows:
         species = r.get("Species")
@@ -90,6 +94,8 @@ def parse_page_json(data, page_number=None):
             year = int(digits)
             if year < 100:
                 year += 1900
+            if year == 1880:
+                year = 1990
             years.append(year)
     years = sorted(years)
 
@@ -121,6 +127,7 @@ def parse_page_json(data, page_number=None):
     rows = list(temp.values())
 
     for r in rows:
+        r["Page"] = int(page_number)
         r["Street"] = meta["street"]
         r["Block"] = meta["block"]
         r["Sector"] = meta["sector"]
@@ -170,11 +177,11 @@ def main():
     MERGED_JSON.write_text(json.dumps(all_rows, indent=2), encoding="utf-8")
 
     # --- Save merged CSV ---
-    base_cols = ["Street", "Block", "Sector", "Street Number", "Tree No.", "Species", "Year Planted"]
-    year_cols = []
-    for y in all_years:
-        year_cols.append(f"Height ({y})")
-        year_cols.append(f"Diameter ({y})")
+    base_cols = ["Page", "Street", "Block", "Sector", "Street Number", "Tree No.", "Species", "Year Planted"]
+    height_cols = [f"Height ({y})" for y in all_years]
+    diameter_cols = [f"Diameter ({y})" for y in all_years]
+
+    year_cols = height_cols + diameter_cols
 
     fieldnames = base_cols + year_cols
 

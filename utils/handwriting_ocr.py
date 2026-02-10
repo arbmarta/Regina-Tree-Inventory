@@ -12,7 +12,7 @@ from pypdf import PdfReader, PdfWriter
 API_TOKEN = os.environ["HWOCR_API_TOKEN"]
 EXTRACTOR_ID = "Y5mPJa5zN7"
 
-BATCH_SIZE = 250
+BATCH_SIZE = 300
 POLL_INTERVAL = 3
 DELETE_AFTER_SECONDS = 1209600  # 14 days
 
