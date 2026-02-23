@@ -135,60 +135,43 @@ def main():
     print(f"Total pages: {total_pages}")
 
     while True:
-        # Determine next batch
-        unprocessed = [
-            i for i in range(1, total_pages + 1)
-            if log.get(str(i), {}).get("status") != "processed"
-        ]
+        submitted = [i for i in range(1, total_pages + 1)
+                     if log.get(str(i), {}).get("status") == "submitted"]
 
-        if not unprocessed:
+        unsubmitted = [i for i in range(1, total_pages + 1)
+                       if log.get(str(i), {}).get("status") not in ("processed", "submitted")]
+
+        if not submitted and not unsubmitted:
             print("All pages processed.")
             return
 
-        batch = unprocessed[:BATCH_SIZE]
-        print(f"\nProcessing batch: pages {batch[0]} → {batch[-1]}")
+        # Download any pending submitted pages first — no uploading until clear
+        if submitted:
+            batch = submitted[:BATCH_SIZE]
+            print(f"\nDownloading batch: pages {batch[0]} → {batch[-1]}")
+            for page_number in batch:
+                entry = log[str(page_number)]
+                print(f"Downloading page {page_number}")
+                wait_for_processing(entry["doc_id"])
+                download_json(entry["doc_id"], page_number)
+                entry["status"] = "processed"
+                save_log(log)
+                time.sleep(1)
+            print("Download batch complete.")
+            return
 
-        # -----------------------------
-        # PHASE 1: UPLOAD
-        # -----------------------------
+        # Only upload if nothing is pending download
+        batch = unsubmitted[:BATCH_SIZE]
+        print(f"\nUploading batch: pages {batch[0]} → {batch[-1]}")
         for page_number in batch:
-            if log.get(str(page_number), {}).get("status") == "submitted":
-                continue
-
             print(f"Uploading page {page_number}")
             page_pdf = extract_page(reader, page_number)
-
             doc_id = retry_request(lambda p=page_pdf: upload_page(p))
-
-            log[str(page_number)] = {
-                "doc_id": doc_id,
-                "status": "submitted"
-            }
+            log[str(page_number)] = {"doc_id": doc_id, "status": "submitted"}
             save_log(log)
-
             page_pdf.unlink()
             time.sleep(1)
-
-        # -----------------------------
-        # PHASE 2: DOWNLOAD
-        # -----------------------------
-        for page_number in batch:
-            entry = log.get(str(page_number))
-            if not entry or entry["status"] != "submitted":
-                continue
-
-            doc_id = entry["doc_id"]
-            print(f"Downloading page {page_number}")
-
-            wait_for_processing(doc_id)
-            download_json(doc_id, page_number)
-
-            entry["status"] = "processed"
-            save_log(log)
-
-            time.sleep(1)
-
-        print("Batch complete.")
+        print("Upload batch complete.")
         return
 
 if __name__ == "__main__":

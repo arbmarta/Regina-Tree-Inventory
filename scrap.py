@@ -1,10 +1,6 @@
-import json, csv
+import json
+from pathlib import Path
 
-with open('data/species_map.json') as f:
-    data = json.load(f)
-
-with open('data/species_map.csv', 'w', newline='') as f:
-    writer = csv.writer(f)
-    writer.writerow(['key', 'value'])
-    for k, v in data.items():
-        writer.writerow([k, v])
+log = json.loads(Path("data/processing_log.json").read_text())
+submitted = sorted([int(k) for k, v in log.items() if v["status"] == "submitted"])
+print(f"Submitted: {submitted[0]} → {submitted[-1]}, count: {len(submitted)}")
